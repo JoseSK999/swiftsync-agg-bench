@@ -154,6 +154,58 @@ fn cmac_block(work: &Workload, session: &cmac::Session) -> (WideSum, WideSum) {
     (added, removed)
 }
 
+/// Batches independent CMAC records across transactions, keeping output-prefix reuse.
+#[inline(never)]
+fn cmac_batched_block(work: &Workload, session: &cmac::BatchedSession) -> (WideSum, WideSum) {
+    let mut removed = WideSum::default();
+    let zero = [0; 32];
+    let mut txids = [&zero; 8];
+    let mut vouts = [0; 8];
+    let mut len = 0;
+    for tx in work.block.txdata.iter().skip(1) {
+        for input in &tx.input {
+            txids[len] = input.previous_output.txid.as_byte_array();
+            vouts[len] = input.previous_output.vout;
+            len += 1;
+            if len == 8 {
+                for tag in session.hash_batch(txids, vouts) {
+                    removed.add_tag(tag);
+                }
+                len = 0;
+            }
+        }
+    }
+    for i in 0..len {
+        removed.add_tag(session.hash(txids[i], vouts[i]));
+    }
+
+    let mut added = WideSum::default();
+    let mut prefixes = [None; 8];
+    len = 0;
+    for group in &work.groups {
+        if group.vouts.is_empty() {
+            continue;
+        }
+        let prefix = session.prepare_txid(&group.txid);
+        for &vout in &group.vouts {
+            prefixes[len] = Some(prefix);
+            vouts[len] = vout;
+            len += 1;
+            if len == 8 {
+                let batch = prefixes.map(|prefix| prefix.expect("full batch has eight prefixes"));
+                for tag in session.finish_batch(batch, vouts) {
+                    added.add_tag(tag);
+                }
+                len = 0;
+            }
+        }
+    }
+    for i in 0..len {
+        added.add_tag(session.finish(prefixes[i].expect("tail prefix is initialized"), vouts[i]));
+    }
+    (added, removed)
+}
+
 #[inline(never)]
 fn sip128_block(work: &Workload, keys: [u64; 2]) -> (WideSum, WideSum) {
     let mut removed = WideSum::default();
@@ -376,6 +428,7 @@ enum Method {
     #[cfg(feature = "software")]
     GfReference2,
     Cmac,
+    CmacBatched,
     Sha256,
     Sip128,
     #[cfg(target_arch = "aarch64")]
@@ -386,6 +439,7 @@ impl Method {
     const ALL: &'static [Self] = &[
         Self::Sha256,
         Self::Cmac,
+        Self::CmacBatched,
         Self::Sip128,
         #[cfg(target_arch = "aarch64")]
         Self::Sip128Neon,
@@ -409,6 +463,8 @@ impl Method {
             Self::GfReference2 => "GF256 bit-at-a-time, 2 products",
             Self::Cmac if cfg!(feature = "software") => "software AES-CMAC, cached txid",
             Self::Cmac => "native AES-CMAC, cached txid",
+            Self::CmacBatched if cfg!(feature = "software") => "software AES-CMAC, 8-way cached",
+            Self::CmacBatched => "native AES-CMAC, 8-way cached",
             Self::Sha256 => "keyed SHA256, 128-bit tag",
             Self::Sip128 => "SipHash128, cached txid",
             #[cfg(target_arch = "aarch64")]
@@ -422,6 +478,7 @@ struct Sessions {
     #[cfg(feature = "software")]
     gf_reference: GfSession,
     cmac: cmac::Session,
+    cmac_batched: cmac::BatchedSession,
     sha_secret: [u8; 16],
     sip_keys: [u64; 2],
 }
@@ -449,6 +506,9 @@ fn run(method: Method, work: &Workload, sessions: &Sessions) {
         }
         Method::Cmac => {
             black_box(cmac_block(work, &sessions.cmac));
+        }
+        Method::CmacBatched => {
+            black_box(cmac_batched_block(work, &sessions.cmac_batched));
         }
         Method::Sha256 => {
             black_box(sha256_block(work, &sessions.sha_secret));
@@ -503,6 +563,7 @@ fn main() {
         #[cfg(feature = "software")]
         gf_reference: GfSession::new_reference(black_box(&[0x42; 32]), black_box(&[0x19; 32])),
         cmac: cmac::Session::new(black_box(&[0x6d; 16])),
+        cmac_batched: cmac::BatchedSession::new(black_box(&[0x6d; 16])),
         sha_secret: black_box([0x6d; 16]),
         sip_keys: black_box([0x0706050403020100, 0x0f0e0d0c0b0a0908]),
     };
@@ -578,6 +639,8 @@ fn main() {
         let medians = data.map(|mut values| median(&mut values));
         let (baseline, baseline_name) = if cfg!(feature = "software") {
             (Method::Sip128, "SipHash128")
+        } else if cfg!(target_arch = "x86_64") {
+            (Method::CmacBatched, "CMAC 8-way")
         } else {
             (Method::Cmac, "CMAC")
         };
@@ -755,9 +818,10 @@ mod tests {
         }
     }
 
-    #[cfg(target_arch = "aarch64")]
     #[test]
-    fn neon_siphash_matches_scalar_complete_blocks() {
+    fn batched_aggregators_match_scalar_complete_blocks() {
+        let cmac = cmac::Session::new(&[0x6d; 16]);
+        let cmac_batched = cmac::BatchedSession::new(&[0x6d; 16]);
         for (height, data, hash) in [
             (
                 367_891,
@@ -772,15 +836,21 @@ mod tests {
         ] {
             let work = Workload::load(height, data, hash);
             assert_eq!(
+                cmac_batched_block(&work, &cmac_batched),
+                cmac_block(&work, &cmac)
+            );
+            #[cfg(target_arch = "aarch64")]
+            assert_eq!(
                 sip128_neon_block(&work, [1, 2]),
                 sip128_block(&work, [1, 2])
             );
         }
     }
 
-    #[cfg(target_arch = "aarch64")]
     #[test]
-    fn neon_siphash_matches_scalar_empty_batches_and_tails() {
+    fn batched_aggregators_match_scalar_empty_batches_and_tails() {
+        let cmac = cmac::Session::new(&[0x6d; 16]);
+        let cmac_batched = cmac::BatchedSession::new(&[0x6d; 16]);
         let mut work = Workload::load(
             866_342,
             BLOCK_866342,
@@ -812,6 +882,11 @@ mod tests {
                     vouts: (count / 2..count).collect(),
                 },
             ];
+            assert_eq!(
+                cmac_batched_block(&work, &cmac_batched),
+                cmac_block(&work, &cmac)
+            );
+            #[cfg(target_arch = "aarch64")]
             assert_eq!(
                 sip128_neon_block(&work, [3, 4]),
                 sip128_block(&work, [3, 4])
