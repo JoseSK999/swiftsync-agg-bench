@@ -1,12 +1,12 @@
 # SwiftSync aggregator benchmark
 
-Compares SwiftSync OutPoint aggregators on two historical mainnet blocks: sums of 128-bit tags from keyed SHA256, AES-CMAC and SipHash128, and GF256 products.
+Compares SwiftSync OutPoint aggregators on two historical mainnet blocks: sums of 128-bit tags from **keyed SHA256**, **AES-CMAC** and **SipHash128**, and **GF256 products**. See [why these designs](#why-these-designs) for more details.
 
 ## Run
 
-You need Rust 1.87 or newer and a C compiler for `zstd`. Run the commands below from the repository root.
+You need **Rust 1.87** or newer and a C compiler for `zstd`. Run the commands below from the repository root.
 
-Hardware and software backends are benchmarked in separate builds. Software builds add a bit-at-a-time GF256 reference case.
+Hardware and software backends are benchmarked in separate builds.
 
 | Build | SHA256 | AES-CMAC | SipHash128 | GF256 |
 | --- | --- | --- | --- | --- |
@@ -43,15 +43,24 @@ RUSTFLAGS='--cfg aes_backend="soft"' cargo test --no-default-features --features
 RUSTFLAGS='--cfg aes_backend="soft"' cargo run --release --no-default-features --features software
 ```
 
-All three settings are required: `--no-default-features` disables SHA256 hardware dispatch, `--features software` selects software GF256 and CMAC, and `RUSTFLAGS` disables hardware AES. The runner checks that AES acceleration is disabled.
+All three settings are required:
 
-Software AES uses RustCrypto's constant-time implementation. NEON remains enabled for the ARM64 SipHash case.
+- `--no-default-features` disables SHA256 hardware dispatch.
+- `--features software` selects software GF256 and CMAC.
+- `RUSTFLAGS` forces software AES.
 
-Software GF256 uses integer multiplication with bit holes, Karatsuba and shift/XOR reduction, without carry-less multiplication instructions. Its fixed operations avoid secret-dependent branches and lookups, assuming constant-time integer multiplication on the host CPU.
+AES uses RustCrypto's constant-time implementation. ARM64 SipHash retains NEON.
+
+GF256 uses bit-hole integer multiplication, Karatsuba and shift/XOR reduction, without carry-less multiplication instructions. It avoids secret-dependent branches and lookups, assuming constant-time integer multiplication on the host CPU.
 
 Each run prints its backends. Append `-- --quick` for a short check.
 
-Tests check GF256 against independent polynomial vectors and the bit-at-a-time reference, CMAC and SHA256 against OpenSSL vectors and SipHash against `siphasher`. Software builds also verify that hardware dispatch is disabled.
+Tests verify:
+
+- GF256 against independent polynomial vectors and the bit-at-a-time reference.
+- CMAC and SHA256 against OpenSSL vectors.
+- SipHash against `siphasher`.
+- Hardware dispatch is disabled in software builds. The runner also checks that AES acceleration is disabled.
 
 ## What is timed?
 
