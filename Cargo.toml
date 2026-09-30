@@ -1,0 +1,31 @@
+[package]
+name = "swiftsync-agg-bench"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "Historical-block benchmark for SwiftSync OutPoint aggregators"
+license = "MIT"
+publish = false
+
+[features]
+# Disable default features for a software-only SHA256 build.
+default = ["sha256-hardware"]
+sha256-hardware = ["bitcoin_hashes/std"]
+# Pair with --no-default-features and --cfg aes_backend="soft".
+software = []
+
+[dependencies]
+aes = { version = "=0.9.2", default-features = false }
+bitcoin = { version = "=0.32.8", default-features = false, features = ["std"] }
+bitcoin_hashes = { version = "=1.1.0", default-features = false }
+zstd = "=0.13.3"
+
+[dev-dependencies]
+hex = "=0.4.3"
+serde_json = "=1.0.150"
+siphasher = { version = "=1.0.3", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

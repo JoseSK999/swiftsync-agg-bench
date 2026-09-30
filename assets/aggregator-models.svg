@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1128" height="973" viewBox="0 0 1128 973" role="img" aria-labelledby="title desc">
+  <title id="title">SwiftSync aggregator models</title>
+  <desc id="desc">Two aggregator models. SHA256, AES-CMAC and SipHash128 map a private key and an OutPoint to a 128-bit fingerprint, then compare widened sums of its two 64-bit halves. GF256 compares added and removed products, with txid and vout encoded as field elements.</desc>
+  <style>
+    text { fill: #d7dde5; font-family: Arial, Helvetica, sans-serif; text-anchor: middle; }
+    .panel { fill: #151b23; stroke: #404d5b; stroke-width: 1.5; }
+    .connector { fill: none; stroke: #8190a2; stroke-width: 1.5; marker-end: url(#arrow); }
+    .heading { font-size: 39px; font-weight: 600; }
+    .body { font-size: 29px; }
+    .note { font-size: 23px; fill: #b8c3d1; }
+    .caption { font-size: 23px; }
+    .math { font-family: 'Cambria Math', 'DejaVu Serif', 'Times New Roman', serif; font-size: 39px; }
+    .operator { font-family: 'Cambria Math', 'DejaVu Serif', 'Times New Roman', serif; font-size: 66px; }
+    .index { font-size: 23px; }
+    .equality { font-family: 'Cambria Math', 'DejaVu Serif', 'Times New Roman', serif; font-size: 46px; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L8 4.5 L0 9 Z" fill="#8190a2"/>
+    </marker>
+    <g id="panels">
+      <rect class="panel" x="-250" y="170" width="500" height="110" rx="7"/>
+      <rect class="panel" x="-250" y="309" width="500" height="170" rx="7"/>
+      <rect class="panel" x="-250" y="508" width="500" height="284" rx="7"/>
+      <rect class="panel" x="-250" y="821" width="500" height="80" rx="7"/>
+      <path class="connector" d="M0 280 V303"/>
+      <path class="connector" d="M0 479 V502"/>
+      <path class="connector" d="M0 792 V815"/>
+    </g>
+    <g id="fingerprint">
+      <text y="363" font-size="30"><tspan font-family="'Times New Roman', serif" font-style="italic">h</tspan> = F(K, txid || LE32(vout))</text>
+      <text class="note" y="415">K: private session key, h ∈ {0,1}<tspan font-size="15" dy="-9">128</tspan></text>
+      <text class="note" x="-112" y="453">h<tspan font-size="15" dy="-8">low</tspan><tspan dy="8">: low 64 bits</tspan></text>
+      <text class="note" x="112" y="453">h<tspan font-size="15" dy="-8">high</tspan><tspan dy="8">: high 64 bits</tspan></text>
+    </g>
+    <g id="sums" transform="translate(0 32)">
+      <text class="math" x="-154" y="548">S<tspan font-size="24" dy="8">+</tspan></text>
+      <text class="math" x="-98" y="548">=</text>
+      <text class="operator" x="-20" y="558">∑</text>
+      <text class="math" x="108" y="548">(h<tspan font-size="20" dy="8">i</tspan><tspan font-size="20" dx="-6" dy="-25">low</tspan><tspan dy="17">, h</tspan><tspan font-size="20" dy="8">i</tspan><tspan font-size="20" dx="-6" dy="-25">high</tspan><tspan dy="17">)</tspan></text>
+      <text class="index" x="-20" y="589">i ∈ added</text>
+      <text class="math" x="-154" y="651">S<tspan font-size="24" dy="8">−</tspan></text>
+      <text class="math" x="-98" y="651">=</text>
+      <text class="operator" x="-20" y="661">∑</text>
+      <text class="math" x="108" y="651">(h<tspan font-size="20" dy="8">i</tspan><tspan font-size="20" dx="-6" dy="-25">low</tspan><tspan dy="17">, h</tspan><tspan font-size="20" dy="8">i</tspan><tspan font-size="20" dx="-6" dy="-25">high</tspan><tspan dy="17">)</tspan></text>
+      <text class="index" x="-20" y="692">i ∈ removed</text>
+      <text class="caption" y="739">Two independent u128 sums per side</text>
+      <text class="equality" y="845">S<tspan font-size="28" dy="9">+</tspan><tspan dy="-9"> = S</tspan><tspan font-size="28" dy="9">−</tspan></text>
+    </g>
+  </defs>
+
+  <rect width="1128" height="973" fill="#0d1117"/>
+  <rect class="panel" x="344" y="22" width="440" height="105" rx="7"/>
+  <text x="564" y="70" font-size="38" font-weight="600">OutPoint</text>
+  <text x="564" y="108" font-family="monospace" font-size="29">txid || LE32(vout)</text>
+  <path d="M564 127 V147" fill="none" stroke="#8190a2" stroke-width="1.5"/>
+  <path class="connector" d="M564 147 H292 V164"/>
+  <path class="connector" d="M564 147 H836 V164"/>
+
+  <g transform="translate(292 0)">
+    <use href="#panels"/>
+    <text class="heading" y="216" style="fill: #9bceba">Keyed fingerprint</text>
+    <text class="note" y="262">SHA256 · AES-CMAC · SipHash128</text>
+    <use href="#fingerprint"/>
+    <use href="#sums"/>
+  </g>
+  <g transform="translate(836 0)">
+    <use href="#panels"/>
+    <text class="heading" y="240" style="fill: #8dbbec">GF256</text>
+    <text y="363" font-size="30"><tspan font-family="'Times New Roman', serif" font-style="italic">f</tspan> = z ⊕ txid ⊕ r·vout</text>
+    <text class="note" y="415">z, r ∈ GF(2<tspan font-size="15" dy="-9">256</tspan><tspan dy="9">)</tspan></text>
+    <text class="note" y="453">Uniform session secrets</text>
+    <g transform="translate(0 32)">
+      <text class="math" x="-110" y="548">P<tspan font-size="24" dy="8">+</tspan></text>
+      <text class="math" x="-50" y="548">=</text>
+      <text class="operator" x="36" y="558">∏</text>
+      <text class="math" x="125" y="548">f<tspan font-size="23" dy="8">i</tspan></text>
+      <text class="index" x="36" y="589">i ∈ added</text>
+      <text class="math" x="-110" y="651">P<tspan font-size="24" dy="8">−</tspan></text>
+      <text class="math" x="-50" y="651">=</text>
+      <text class="operator" x="36" y="661">∏</text>
+      <text class="math" x="125" y="651">f<tspan font-size="23" dy="8">i</tspan></text>
+      <text class="index" x="36" y="692">i ∈ removed</text>
+      <text class="caption" y="739">One product per side</text>
+      <text class="equality" y="845">P<tspan font-size="28" dy="9">+</tspan><tspan dy="-9"> = P</tspan><tspan font-size="28" dy="9">−</tspan></text>
+    </g>
+  </g>
+  <text class="note" x="564" y="947">Each model keeps separate totals for added and removed OutPoints.</text>
+</svg>

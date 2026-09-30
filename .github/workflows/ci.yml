@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Tests and Clippy (${{ matrix.os }}, ${{ matrix.backend }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        backend: [native, software]
+        include:
+          - backend: native
+            cargo_args: ''
+            rustflags: ''
+          - backend: software
+            cargo_args: --no-default-features --features software
+            rustflags: '--cfg aes_backend="soft"'
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component clippy --no-self-update
+      - name: Test
+        run: cargo +stable test --locked --all-targets ${{ matrix.cargo_args }}
+      - name: Clippy
+        run: cargo +stable clippy --locked --all-targets ${{ matrix.cargo_args }} -- -D warnings
+
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
+      - name: Check formatting
+        run: cargo +stable fmt -- --check
